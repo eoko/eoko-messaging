@@ -1,34 +1,43 @@
 const amqp    = require('amqplib');
 const Promise = require('bluebird');
 const winston = require('winston');
+const assert  = require('assert');
 
 let singleton = null;
 
 function publish({ exchange, key, message, options = {} }) {
-  if (key === undefined) {
-    throw new Error('Parameter key must be defined');
-  }
-  if (message === undefined) {
-    throw new Error('Parameter message must be defined');
-  }
+  assert.ok(message, 'Parameter message must be defined');
+  key = key || '';
+
+  const exchangeName = exchange || this.configuration.exchange;
+  this.logger.info('Publish "' + JSON.stringify(message) + `" to "${key}" on exchange "${exchangeName}"`);
 
   return this.channel.publish(
-    exchange || this.configuration.exchange, 
+    exchangeName, 
     key, 
     new Buffer(JSON.stringify(message)), 
     Object.assign({ persistent: true }, options)
   );
 };
 
-function bindQueue({ exchange, name, options }) {
-  return this.channel.assertQueue(name, options).then((q) => {
-    this.channel.bindQueue(q.queue, exchange || this.configuration.exchange, name);
+function bindQueue({ exchange, queue, pattern, options }) {
+  assert.ok(exchange, 'Exchange parameter required');
+  
+  const exchangeName = exchange;
+  const queueName = queue || this.configuration.exchange;
+  pattern = pattern || '';
+
+  this.logger.info(`Binded pattern "${pattern}" in exchange "${exchangeName}" to queue "${queueName}"`);
+  
+  return this.channel.assertQueue(queueName, options).then((q) => {
+    this.channel.bindQueue(q.queue, exchangeName, pattern);
     return q.queue;
-  })
+  });
 };
 
 function consume(queue, callback) {
   return this.channel.consume(queue, (msg) => {
+    this.logger.info(`Message received "${msg}"`);
     msg.rawContent = msg.content;
     
     try {
@@ -53,9 +62,15 @@ function close() {
     this.conn.close();
     this.conn = null;
   }
+
+  if (singleton === this) {
+    singleton = null;
+  }
+
+  this.logger.info(`Connection to ${this.configuration.url} closed`);
 }
 
-function create({ url, exchange } = {}) {
+function create({ url, exchange, logger } = {}) {
   let instance = {
     configuration: {
       url: url || process.env.RABBIT_URL,
@@ -66,6 +81,7 @@ function create({ url, exchange } = {}) {
     bindQueue: bindQueue,
     consume: consume,
     close: close,
+    logger: logger || winston,
     conn: null
   };
 
@@ -83,11 +99,9 @@ function create({ url, exchange } = {}) {
                       instance.channel = channel;
                       return channel.assertExchange(instance.configuration.exchange, 'topic', { durable: true });
                     })
-                    .then(() => instance)
-                    .catch(() => {
-                      if (singleton === instance) {
-                        singleton = null;
-                      }
+                    .then(() => { 
+                      instance.logger.info(`Connection to "${instance.configuration.url}" established and exchange "${instance.configuration.exchange}" asserted`);
+                      return instance
                     });
   return instance;
 };
@@ -95,10 +109,10 @@ function create({ url, exchange } = {}) {
 module.exports = {
   create: create,
   get main() {
-    console.log('MAIN CREATED');
     if (singleton === null) {
-      singleton = create();
+      create();
     }
+
     return singleton;
   }
 };
