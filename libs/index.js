@@ -26,7 +26,7 @@ function bindQueue({ exchange, queue, pattern, options }) {
   const exchangeName = exchange;
   const queueName = queue || this.configuration.exchange;
   pattern = pattern || '';
-
+  
   this.logger.info(`Binded pattern "${pattern}" in exchange "${exchangeName}" to queue "${queueName}"`);
   
   return this.channel.assertQueue(queueName, options).then((q) => {
@@ -50,6 +50,10 @@ function consume(queue, callback) {
 
 function ack(message, allUpTo) {
   return this.channel.ack(message, allUpTo);
+}
+
+function nack(message, allUpTo, requeue) {
+  return this.channel.nack(message, allUpTo, requeue);
 }
 
 function close() {
@@ -78,6 +82,7 @@ function create({ url, exchange, logger } = {}) {
     },
     publish: publish,
     ack: ack,
+    nack: nack,
     bindQueue: bindQueue,
     consume: consume,
     close: close,
