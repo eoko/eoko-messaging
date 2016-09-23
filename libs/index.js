@@ -13,22 +13,22 @@ function publish({ exchange, key, message, options = {} }) {
   this.logger.info('Publish "' + JSON.stringify(message) + `" to "${key}" on exchange "${exchangeName}"`);
 
   return this.channel.publish(
-    exchangeName, 
-    key, 
-    new Buffer(JSON.stringify(message)), 
+    exchangeName,
+    key,
+    new Buffer(JSON.stringify(message)),
     Object.assign({ persistent: true }, options)
   );
 };
 
 function bindQueue({ exchange, queue, pattern, options }) {
   assert.ok(exchange, 'Exchange parameter required');
-  
+
   const exchangeName = exchange;
   const queueName = queue || this.configuration.exchange;
   pattern = pattern || '';
-  
+
   this.logger.info(`Binded pattern "${pattern}" in exchange "${exchangeName}" to queue "${queueName}"`);
-  
+
   return this.channel.assertQueue(queueName, options).then((q) => {
     this.channel.bindQueue(q.queue, exchangeName, pattern);
     return q.queue;
@@ -37,16 +37,16 @@ function bindQueue({ exchange, queue, pattern, options }) {
 
 function consume(queue, callback) {
   return this.channel.consume(queue, (msg) => {
-    this.logger.info(`Message received "${msg}"`);
+    this.logger.info(`Message received "${JSON.stringify(msg)}"`);
     msg.rawContent = msg.content;
-    
+
     try {
       msg.content = JSON.parse(msg.content);
     } catch(e) { }
 
     callback(msg);
   });
-};
+}
 
 function ack(message, allUpTo) {
   return this.channel.ack(message, allUpTo);
@@ -75,10 +75,10 @@ function close() {
 }
 
 function create({ url, exchange, logger } = {}) {
-  let instance = {
+  const instance = {
     configuration: {
       url: url || process.env.RABBIT_URL,
-      exchange: exchange || process.env.RABBIT_EXCHANGE //a définir ici le nom du packet si l'exchange n'est pas définit
+      exchange: exchange || process.env.RABBIT_EXCHANGE, //a définir ici le nom du packet si l'exchange n'est pas définit
     },
     publish: publish,
     ack: ack,
@@ -87,7 +87,7 @@ function create({ url, exchange, logger } = {}) {
     consume: consume,
     close: close,
     logger: logger || winston,
-    conn: null
+    conn: null, 
   };
 
   if (singleton === null) {
@@ -104,12 +104,13 @@ function create({ url, exchange, logger } = {}) {
                       instance.channel = channel;
                       return channel.assertExchange(instance.configuration.exchange, 'topic', { durable: true });
                     })
-                    .then(() => { 
+                    .then(() => {
                       instance.logger.info(`Connection to "${instance.configuration.url}" established and exchange "${instance.configuration.exchange}" asserted`);
-                      return instance
+                      return instance;
                     });
+
   return instance;
-};
+}
 
 module.exports = {
   create: create,
@@ -119,5 +120,5 @@ module.exports = {
     }
 
     return singleton;
-  }
+  },
 };
